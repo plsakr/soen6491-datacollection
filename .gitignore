@@ -1,0 +1,9 @@
+*.db
+*.zip
+*.json
+
+.DS_Store
+
+tmp/
+
+*.code-workspace
