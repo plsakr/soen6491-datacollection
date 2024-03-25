@@ -208,6 +208,10 @@ def get_code_metrics(json_file, filenames):
                         # Iterate over the metrics
                         for metric, value in method['metricsValues'].items():
                             # Append the metric type, method name, and value to the list
+                            qualifiedName = method['fullyQualifiedName']
+                            if (qualifiedName is None):
+                              qualifiedName = ''
+
                             code_metrics.append((metric, item['sourceFile']['fileRelativePath'], value, method['fullyQualifiedName'].split('.')[-1]))
 
     return code_metrics
@@ -277,7 +281,7 @@ create_db(conn)
 
 print('running RefactoringMiner...')
 # 2. Run RefactoringMiner.jar
-# subprocess.run(["java", "-jar", "RefactoringMiner.jar", git_url, repo_name, start_commit, end_commit])
+subprocess.run(["java", "-jar", "RefactoringMiner.jar", git_url, repo_name, start_commit, end_commit])
 
 # 3. Process refactoring output
 refactorings = []
@@ -294,8 +298,8 @@ for filename in tqdm(os.listdir(output_dir)):
             pass
 
         commit_refactorings[commit_hash] = []
-            
-        
+
+
         with open(os.path.join(output_dir, filename)) as f:
             # Initialize an empty string for accumulated JSON chunks
             chunk = ""
@@ -331,7 +335,7 @@ refactoring_commits = list(commit_refactorings.keys())
 
 print('Running organic and gathering churn data...')
 
-# os.mkdir(f"tmp/output/smells")
+os.mkdir(f"tmp/output/smells")
 
 seen_commits = set()
 
@@ -352,7 +356,7 @@ for commit_hash in tqdm(refactoring_commits):
         continue
 
     previous_commit_details = get_commit_details(previous_commit)
-    insert_commit(conn, previous_commit, previous_commit_details['commit_timestamp'], previous_commit_details['commit_author'], previous_commit_details['commit_message'], None)       
+    insert_commit(conn, previous_commit, previous_commit_details['commit_timestamp'], previous_commit_details['commit_author'], previous_commit_details['commit_message'], None)
 
     current_commit_details = get_commit_details(commit_hash)
     insert_commit(conn, commit_hash, current_commit_details['commit_timestamp'], current_commit_details['commit_author'], current_commit_details['commit_message'], previous_commit)
@@ -363,10 +367,10 @@ for commit_hash in tqdm(refactoring_commits):
     for commit in [commit_hash, previous_commit]:
         os.chdir(f"tmp/{repo_name}")
         subprocess.run(["git", "checkout", commit, '--force'], capture_output=True)
- 
+
         os.chdir(old_dir)
-        # subprocess.run(["java", "-jar", "organic-v0.1.1-OPT.jar", "-sf", f"tmp/output/smells/{repo_name}-{commit}.json", "-src", f"tmp/{repo_name}"], capture_output=True)
-        
+        subprocess.run(["java", "-jar", "organic-v0.1.1-OPT.jar", "-sf", f"tmp/output/smells/{repo_name}-{commit}.json", "-src", f"tmp/{repo_name}"], capture_output=True)
+
         refactored_files = []
         if commit in commit_refactorings:
             refactored_files = [(f"tmp/{repo_name}/" + a) for a in ref['files'] for ref in commit_refactorings[commit]]
@@ -375,10 +379,10 @@ for commit_hash in tqdm(refactoring_commits):
         metrics_data[commit] = get_code_metrics(os.path.join('tmp/output/smells/', f"{repo_name}-{commit}.json"), refactored_files)
         for smell in smells_data[commit]:
             insert_organic_smell(conn, file_ids[smell[1].replace(f"tmp/{repo_name}/", '')], commit, smell[0])
-        
+
         for metric in metrics_data[commit]:
             insert_organic_metric(conn, metric[0], file_ids[metric[1].replace(f"tmp/{repo_name}/", '')], metric[3], metric[2], commit)
-        
+
 
 
     os.chdir(f"tmp/{repo_name}")
